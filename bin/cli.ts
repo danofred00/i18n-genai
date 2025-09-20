@@ -4,7 +4,10 @@ import {
   status,
   translate,
   translateAll,
-  DESCRIPTION, NAME, VERSION 
+  DESCRIPTION,
+  NAME,
+  VERSION,
+  custom,
 } from "../src";
 import { program } from "commander";
 import dotenv from "dotenv";
@@ -45,4 +48,15 @@ program
   .description("Displays all the configuration of the tool")
   .action(getConfigCommand);
 
+program
+  .command("custom")
+  .description("Customize the configuration or behavior of the tool")
+  .option('-f, --file <path>', 'Path to a custom configuration file', 'i18n-genai.config.js')
+  .action(custom);
+
 program.parse(process.argv);
+
+
+if(!process.argv.slice(2).length) {
+  program.outputHelp();
+}

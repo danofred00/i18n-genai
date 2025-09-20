@@ -2,6 +2,8 @@ import { Config, Locale } from "@/config";
 import fs from "node:fs";
 import path from "node:path";
 
+export type TranslationContent = Record<string, string>;
+
 ////////////////////////////////////////////////////////////////////
 ///////////////// OBJECT MANIPULATION FUNCTIONS ////////////////////
 ////////////////////////////////////////////////////////////////////
@@ -48,13 +50,13 @@ export function arrayToObject<T extends string | number>(arr: T[]) {
  * @returns An array of extracted translation keys.
  */
 export function extractTranslationsKeysFromText(text: string): string[] {
-  const regex = /(?:i18n\.t|t)\(\s*(['"])(.*?)\1\s*\)/g;
-  const keys: string[] = [];
+  const regex = /\b(?:i18n\.t|t)\(\s*(['"`])((?:\\\1|.)*?)\1\s*(?:,|\))/g;
+  const keys = new Set<string>();
   let match;
   while ((match = regex.exec(text)) !== null) {
-    keys.push(match[2]);
+    keys.add(match[2]);
   }
-  return keys;
+  return [...keys];
 }
 
 /**
@@ -113,8 +115,32 @@ export function extractTranslationKeysFromDirectory(
   return [...new Set(allKeys)]; // Remove duplicates
 }
 
+/**
+ * Read JSON object from a file
+ */
+export function readJsonFile(filePath: string) {
+  return fs.existsSync(filePath)
+    ? JSON.parse(fs.readFileSync(filePath, "utf-8"))
+    : {};
+}
+
+/**
+ * Write JSON object into a file
+ */
+export function writeJsonToFile(filePath: string, content: object) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    console.log("[+] Creating directory", dir);
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify(content, null, 2), {
+    encoding: "utf-8",
+  });
+}
+
 ////////////////////////////////////////////////////////////////////
-////////////////// TEXT MANIPULATION FUNCTIONS /////////////////////
+/////////////// TRANSLATIONS MANIPULATION FUNCTIONS ////////////////
 ////////////////////////////////////////////////////////////////////
 
 /**
@@ -122,24 +148,19 @@ export function extractTranslationKeysFromDirectory(
  */
 export function saveTranslationsToFile(
   locale: Locale,
-  translations: Record<string, string>,
+  translations: TranslationContent,
   config: Config
 ) {
   const targetLocaleFile = getTranslationsFilePath(config, locale.code);
-
-  let existingData = { translations: {} as Record<string, string> };
+  let data = { translation: {} as TranslationContent };
 
   if (fs.existsSync(targetLocaleFile)) {
     try {
-      const fileContent = JSON.parse(
-        fs.readFileSync(targetLocaleFile, "utf-8")
-      );
+      const fileContent = readJsonFile(targetLocaleFile);
 
-      console.log("fileContent", fileContent, translations)
-
-      existingData = fileContent.translations
+      data = fileContent.translation
         ? fileContent
-        : { translations: fileContent };
+        : { translation: fileContent };
     } catch (error) {
       console.warn(
         `[!] Warning: Could not parse existing translations file for locale "${locale.code}". Overwriting with new data.`
@@ -147,21 +168,16 @@ export function saveTranslationsToFile(
     }
   }
 
-  existingData.translations = { ...existingData.translations, ...translations };
-  // ensure directory exists
-  const dir = path.dirname(targetLocaleFile);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  // Merge translations
+  data.translation = { ...data.translation, ...translations };
 
   console.log(
     `[+] Saving ${
       Object.keys(translations).length
     } translations to ${targetLocaleFile}`
   );
-  fs.writeFileSync(targetLocaleFile, JSON.stringify(existingData, null, 2), {
-    encoding: "utf-8",
-  });
+  writeJsonToFile(targetLocaleFile, data);
+
   console.log(`[+] Translations saved successfully to ${locale.code}.json`);
 }
 
@@ -174,27 +190,17 @@ export function saveTranslationsKeys(
 ) {
   let newKeysAdded = 0;
   const trFile = getTranslationsFilePath(config);
-  const existingKeys: Record<string, string> = fs.existsSync(trFile)
-    ? JSON.parse(fs.readFileSync(trFile, "utf-8"))
-    : {};
+  const existingKeys: TranslationContent = readJsonFile(trFile);
 
   for (const key of Object.keys(keys)) {
-    if (!existingKeys[key]) {
+    if (!Object(existingKeys).hasOwnProperty(key)) {
       newKeysAdded++;
       existingKeys[key] = "";
     }
   }
 
   // ensure directory exists
-  const dir = path.dirname(trFile);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  // Save the updated keys back to the file
-  fs.writeFileSync(trFile, JSON.stringify(existingKeys, null, 2), {
-    encoding: "utf-8",
-  });
+  writeJsonToFile(trFile, existingKeys);
 
   console.log(`[+] Saved ${newKeysAdded} new keys to ${path.basename(trFile)}`);
   return existingKeys;
@@ -207,7 +213,7 @@ export function getTranslationsFilePath(config: Config, locale?: string) {
   return path.join(
     process.cwd(),
     config.localeFolder,
-    `${locale || "translations"}.json`
+    `${locale ?? config.storageTranslationsFile ?? "translations"}.json`
   );
 }
 
@@ -218,8 +224,8 @@ export function loadTranslationsFile(
   const localeFilePath = getTranslationsFilePath(config, locale?.code);
   if (fs.existsSync(localeFilePath)) {
     try {
-      const fileContent = JSON.parse(fs.readFileSync(localeFilePath, "utf-8"));
-      return !locale ? fileContent : fileContent.translations ?? {};
+      const fileContent = readJsonFile(localeFilePath);
+      return locale ? fileContent["translation"] : fileContent;
     } catch (error) {
       console.warn(
         `[!] Warning: Could not parse translations file for locale "${locale?.code}".`

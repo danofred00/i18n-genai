@@ -3,7 +3,15 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { MAX_KEYS_PER_REQUEST } from "./constants.js";
-import { mergeObjects } from "./libs/utils.js";
+import { mergeObjects, TranslationContent } from "./libs/utils.js";
+
+type TCustomPrompt =
+  | ((
+      content: TranslationContent,
+      targetLang: string,
+      sourceLang: string
+    ) => string)
+  | undefined;
 
 /**
  * Default configuration object

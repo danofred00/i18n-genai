@@ -1,18 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { Config, Locale } from "@/config.js";
 import { MAX_KEYS_PER_REQUEST } from "@/constants.js";
-import { arrayToObject, chunkObject } from "./utils.js";
+import { arrayToObject, chunkObject, TranslationContent } from "./utils.js";
 
 /**
  * Create a prompt for the AI model based on the provided content and language.
  */
 export function createPrompt(
   content: Record<string, string>,
-  lang: string = "English"
+  lang: string = "English",
+  sourceLang: string = "En"
 ): string {
   return `
+    Your are specialized in translation of languages JSON files for i18n.
     Please complete my translation file by adding the ${lang} version of the keys in this JSON as values.
+    If the source language of keys is same than the target, you can just duplicate the same content, and write it well.
+    In some cases, you has hability to detect the source language, but i will provide the configured one in my case.
     Return only the JSON response with no comments, no additional messages, nothing else but the requested JSON.
+
+    My Source Language Code: ${sourceLang}
 
     Here is my JSON:
     
@@ -44,7 +50,7 @@ export async function processTranslationsBatch(
 ) {
   const maxKeysPerRequest = config.maxKeysPerRequest ?? MAX_KEYS_PER_REQUEST;
   const chunks = chunkObject(arrayToObject(keys), maxKeysPerRequest);
-  const allTranslations: Record<string, string> = {};
+  const allTranslations: TranslationContent = {};
 
   console.log(
     `[+] Processing ${keys.length} keys in ${chunks.length} chunks of up to ${maxKeysPerRequest} keys each.`
@@ -58,7 +64,7 @@ export async function processTranslationsBatch(
     );
 
     try {
-      const prompt = createPrompt(chunk, locale.label);
+      const prompt = createPrompt(chunk, locale.label, config.defaultLocale);
       console.log(
         `[+] Sending request to AI model (${config.geminiApiModel})...`
       );
@@ -96,4 +102,3 @@ export async function processTranslationsBatch(
 
   return allTranslations;
 }
-

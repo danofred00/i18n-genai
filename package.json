@@ -34,7 +34,8 @@
     }
   },
   "bin": {
-    "i18n-genai": "dist/bin/cli.js"
+    "i18n-genai": "dist/bin/cli.js",
+    "igenai": "dist/bin/cli.js"
   },
   "files": [
     "dist",
